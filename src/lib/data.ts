@@ -27,6 +27,15 @@ export type Ride = {
   price: number;
   payment: "Cash" | "Card" | "Wallet";
   createdAt: string;
+  completedAt?: string;
+};
+
+export type User = {
+  name: string;
+  email: string;
+  phone: string;
+  photo: string;
+  walletBalance: number;
 };
 
 export const RIDE_OPTIONS: RideOption[] = [
@@ -81,6 +90,57 @@ export const DEMO_DRIVER: Driver = {
   photo: "https://api.dicebear.com/7.x/avataaars/svg?seed=Tunde",
 };
 
+export const DEMO_USER: User = {
+  name: "Adaobi Okonkwo",
+  email: "adaobi@email.com",
+  phone: "+234 803 456 7890",
+  photo: "https://api.dicebear.com/7.x/avataaars/svg?seed=Adaobi",
+  walletBalance: 12500,
+};
+
+export const SAMPLE_HISTORY: Ride[] = [
+  {
+    id: "hist_1",
+    status: "completed",
+    pickup: "Lekki Phase 1",
+    destination: "Victoria Island",
+    option: RIDE_OPTIONS[1],
+    driver: DEMO_DRIVER,
+    price: 2500,
+    payment: "Cash",
+    createdAt: new Date(Date.now() - 86400000 * 2).toISOString(),
+    completedAt: new Date(Date.now() - 86400000 * 2 + 2400000).toISOString(),
+  },
+  {
+    id: "hist_2",
+    status: "completed",
+    pickup: "Ikeja GRA",
+    destination: "Murtala Muhammed Airport",
+    option: RIDE_OPTIONS[2],
+    driver: { ...DEMO_DRIVER, name: "Chidi Okoro", plate: "KJA 445 AB", car: "Honda CR-V" },
+    price: 4000,
+    payment: "Wallet",
+    createdAt: new Date(Date.now() - 86400000 * 5).toISOString(),
+    completedAt: new Date(Date.now() - 86400000 * 5 + 3600000).toISOString(),
+  },
+];
+
 export function formatNaira(amount: number) {
   return `₦${amount.toLocaleString("en-NG")}`;
+}
+
+export function formatDate(iso: string) {
+  const d = new Date(iso);
+  return d.toLocaleDateString("en-NG", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+export function formatTime(iso: string) {
+  return new Date(iso).toLocaleTimeString("en-NG", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }

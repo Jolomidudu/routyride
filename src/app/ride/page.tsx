@@ -6,7 +6,6 @@ import {
   POPULAR_DESTINATIONS,
   DEMO_DRIVER,
   DEMO_USER,
-  SAMPLE_HISTORY,
   formatNaira,
   formatDate,
   formatTime,
@@ -15,6 +14,7 @@ import {
   type Ride,
   type User,
 } from "@/lib/data";
+import { createRide, loadRides, updateRideStatus } from "@/lib/rides-client";
 
 type Tab = "home" | "activity" | "wallet" | "profile";
 type Flow =
@@ -33,48 +33,85 @@ export default function RideAppPage() {
   const [destination, setDestination] = useState("");
   const [selectedOption, setSelectedOption] = useState<RideOption | null>(null);
   const [activeRide, setActiveRide] = useState<Ride | null>(null);
-  const [history, setHistory] = useState<Ride[]>(SAMPLE_HISTORY);
+  const [history, setHistory] = useState<Ride[]>([]);
   const [user, setUser] = useState<User>(DEMO_USER);
   const [searchProgress, setSearchProgress] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState<"Cash" | "Card" | "Wallet">("Cash");
   const [isSchedule, setIsSchedule] = useState(false);
   const [scheduleDate, setScheduleDate] = useState("");
   const [scheduleTime, setScheduleTime] = useState("09:00");
+  const [apiError, setApiError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    let isCurrent = true;
+    loadRides()
+      .then((rides) => {
+        if (!isCurrent) return;
+        setHistory(rides);
+
+        const currentRide = rides.find((ride) => ride.status === "searching" || ride.status === "arriving");
+        if (!currentRide) return;
+
+        setActiveRide(currentRide.status === "arriving" ? { ...currentRide, driver: DEMO_DRIVER } : currentRide);
+        setSelectedOption(currentRide.option);
+        setPickup(currentRide.pickup);
+        setDestination(currentRide.destination);
+        setPaymentMethod(currentRide.payment);
+        setFlow(currentRide.status === "searching" ? "searching" : "active");
+      })
+      .catch((error: unknown) => {
+        if (isCurrent) {
+          setApiError(error instanceof Error ? error.message : "Could not load your rides.");
+        }
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, []);
 
   // Searching simulation
   useEffect(() => {
     if (flow !== "searching") return;
-    const interval = setInterval(() => {
-      setSearchProgress((p) => {
-        if (p >= 100) {
-          clearInterval(interval);
-          const ride: Ride = {
-            id: `ride_${Date.now()}`,
-            status: "arriving",
-            pickup: pickup || "123 Allen Avenue, Ikeja",
-            destination: destination || "Victoria Island, Lagos",
-            option: selectedOption!,
-            driver: DEMO_DRIVER,
-            price: selectedOption!.price,
-            payment: paymentMethod,
-            createdAt: new Date().toISOString(),
-          };
-          setActiveRide(ride);
-          setFlow("active");
-          return 100;
-        }
-        return p + 8;
-      });
+    const timeout = setTimeout(() => {
+      setSearchProgress((progress) => Math.min(100, progress + 8));
     }, 160);
-    return () => clearInterval(interval);
-  }, [flow, pickup, destination, selectedOption, paymentMethod]);
+    return () => clearTimeout(timeout);
+  }, [flow, searchProgress]);
+
+  useEffect(() => {
+    if (flow !== "searching" || searchProgress < 100 || !activeRide) return;
+
+    let isCurrent = true;
+    const timeout = setTimeout(() => {
+      updateRideStatus(activeRide.id, "arriving")
+        .then((ride) => {
+          if (!isCurrent) return;
+          const matchedRide = { ...ride, driver: DEMO_DRIVER };
+          setActiveRide(matchedRide);
+          setHistory((current) => [matchedRide, ...current.filter((item) => item.id !== ride.id)]);
+          setFlow("active");
+        })
+        .catch((error: unknown) => {
+          if (isCurrent) {
+            setApiError(error instanceof Error ? error.message : "Could not update ride status.");
+          }
+        });
+    }, 300);
+
+    return () => {
+      isCurrent = false;
+      clearTimeout(timeout);
+    };
+  }, [flow, searchProgress, activeRide]);
 
   const scheduledISO = useMemo(() => {
     if (!scheduleDate || !scheduleTime) return "";
     return new Date(`${scheduleDate}T${scheduleTime}:00`).toISOString();
   }, [scheduleDate, scheduleTime]);
 
-  const handleRequestRide = () => {
+  const handleRequestRide = async () => {
     if (!selectedOption) return;
     if (isSchedule) {
       const tomorrow = new Date();
@@ -83,53 +120,93 @@ export default function RideAppPage() {
       setFlow("schedule");
       return;
     }
-    setSearchProgress(0);
-    setFlow("searching");
+    setApiError("");
+    setIsSubmitting(true);
+    try {
+      const ride = await createRide({
+        pickup,
+        destination,
+        optionId: selectedOption.id,
+        paymentMethod,
+      });
+      setActiveRide(ride);
+      setHistory((current) => [ride, ...current]);
+      setSearchProgress(0);
+      setFlow("searching");
+    } catch (error) {
+      setApiError(error instanceof Error ? error.message : "Could not request a ride.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleConfirmSchedule = () => {
+  const handleConfirmSchedule = async () => {
     if (!selectedOption || !scheduledISO) return;
-    const ride: Ride = {
-      id: `ride_${Date.now()}`,
-      status: "scheduled",
-      pickup: pickup || "123 Allen Avenue, Ikeja",
-      destination: destination || "Victoria Island, Lagos",
-      option: selectedOption,
-      price: selectedOption.price,
-      payment: paymentMethod,
-      createdAt: new Date().toISOString(),
-      scheduledFor: scheduledISO,
-    };
-    setHistory((prev) => [ride, ...prev]);
-    setActiveRide(ride);
-    setFlow("scheduled_confirm");
+    setApiError("");
+    setIsSubmitting(true);
+    try {
+      const ride = await createRide({
+        pickup,
+        destination,
+        optionId: selectedOption.id,
+        paymentMethod,
+        scheduledFor: scheduledISO,
+      });
+      setHistory((current) => [ride, ...current]);
+      setActiveRide(ride);
+      setFlow("scheduled_confirm");
+    } catch (error) {
+      setApiError(error instanceof Error ? error.message : "Could not schedule this ride.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleCancel = () => {
+  const handleCancel = async () => {
+    const previousFlow = flow;
+    setFlow("idle");
+    setIsSubmitting(true);
+    if (activeRide) {
+      setApiError("");
+      try {
+        const ride = await updateRideStatus(activeRide.id, "cancelled");
+        setHistory((current) => [ride, ...current.filter((item) => item.id !== ride.id)]);
+      } catch (error) {
+        setApiError(error instanceof Error ? error.message : "Could not cancel this ride.");
+        setFlow(previousFlow);
+        setIsSubmitting(false);
+        return;
+      }
+    }
     setActiveRide(null);
     setSelectedOption(null);
     setFlow("idle");
     setSearchProgress(0);
     setIsSchedule(false);
+    setIsSubmitting(false);
   };
 
-  const handleComplete = () => {
+  const handleComplete = async () => {
     if (activeRide) {
-      const completed: Ride = {
-        ...activeRide,
-        status: "completed",
-        completedAt: new Date().toISOString(),
-      };
-      setHistory((prev) => [completed, ...prev.filter((r) => r.id !== activeRide.id)]);
-      if (paymentMethod === "Wallet") {
-        setUser((u) => ({
-          ...u,
-          walletBalance: Math.max(0, u.walletBalance - activeRide.price),
-        }));
+      setApiError("");
+      setIsSubmitting(true);
+      try {
+        const completed = await updateRideStatus(activeRide.id, "completed");
+        setHistory((current) => [completed, ...current.filter((ride) => ride.id !== completed.id)]);
+        if (paymentMethod === "Wallet") {
+          setUser((current) => ({
+            ...current,
+            walletBalance: Math.max(0, current.walletBalance - activeRide.price),
+          }));
+        }
+        setActiveRide({ ...completed, driver: activeRide.driver });
+        setFlow("completed");
+      } catch (error) {
+        setApiError(error instanceof Error ? error.message : "Could not complete this ride.");
+      } finally {
+        setIsSubmitting(false);
       }
-      setActiveRide(completed);
     }
-    setFlow("completed");
   };
 
   const handleDone = () => {
@@ -140,6 +217,7 @@ export default function RideAppPage() {
     setFlow("idle");
     setIsSchedule(false);
     setTab("home");
+    setApiError("");
   };
 
   const showTabs = flow === "idle";
@@ -147,6 +225,12 @@ export default function RideAppPage() {
   return (
     <div className="min-h-dvh bg-[#f3f3f3] flex justify-center">
       <div className="w-full max-w-[520px] bg-white min-h-dvh h-dvh max-h-[960px] flex flex-col relative overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.08)]">
+          {apiError && (
+            <div role="alert" className="absolute left-3 right-3 top-3 z-50 flex items-start justify-between gap-3 rounded-lg bg-red-50 px-4 py-3 text-[13px] text-red-800 shadow-md">
+              <p>{apiError}</p>
+              <button onClick={() => setApiError("")} className="shrink-0 font-semibold underline">Dismiss</button>
+            </div>
+          )}
 
           {/* Screens */}
           {flow === "idle" && tab === "home" && (
@@ -180,6 +264,7 @@ export default function RideAppPage() {
               paymentMethod={paymentMethod}
               setPaymentMethod={setPaymentMethod}
               isSchedule={isSchedule}
+              isSubmitting={isSubmitting}
               onSelect={setSelectedOption}
               onBack={() => setFlow("idle")}
               onRequest={handleRequestRide}
@@ -195,17 +280,19 @@ export default function RideAppPage() {
               setScheduleDate={setScheduleDate}
               scheduleTime={scheduleTime}
               setScheduleTime={setScheduleTime}
+              isSubmitting={isSubmitting}
               onBack={() => setFlow("select")}
               onConfirm={handleConfirmSchedule}
             />
           )}
 
           {flow === "searching" && (
-            <SearchingScreen progress={searchProgress} onCancel={handleCancel} />
+            <SearchingScreen progress={searchProgress} isSubmitting={isSubmitting} onCancel={handleCancel} />
           )}
           {flow === "active" && activeRide && (
             <ActiveRideScreen
               ride={activeRide}
+              isSubmitting={isSubmitting}
               onCancel={handleCancel}
               onComplete={handleComplete}
             />
@@ -316,6 +403,7 @@ function SelectScreen({
   paymentMethod,
   setPaymentMethod,
   isSchedule,
+  isSubmitting,
   onSelect,
   onBack,
   onRequest,
@@ -326,6 +414,7 @@ function SelectScreen({
   paymentMethod: "Cash" | "Card" | "Wallet";
   setPaymentMethod: (m: "Cash" | "Card" | "Wallet") => void;
   isSchedule: boolean;
+  isSubmitting: boolean;
   onSelect: (o: RideOption) => void;
   onBack: () => void;
   onRequest: () => void;
@@ -412,10 +501,12 @@ function SelectScreen({
       <div className="p-4 border-t border-slate-100 shrink-0 safe-bottom">
         <button
           onClick={onRequest}
-          disabled={!selected}
+          disabled={!selected || isSubmitting}
           className="w-full bg-[#000000] hover:bg-[#262626] disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold py-4 rounded-2xl transition active:scale-[0.99] shadow-lg shadow-slate-900/25 text-[15px]"
         >
-          {!selected
+          {isSubmitting
+            ? "Saving ride..."
+            : !selected
             ? "Select a ride"
             : isSchedule
               ? `Schedule ${selected.name} · ${formatNaira(selected.price)}`
@@ -435,6 +526,7 @@ function ScheduleScreen({
   setScheduleDate,
   scheduleTime,
   setScheduleTime,
+  isSubmitting,
   onBack,
   onConfirm,
 }: {
@@ -445,6 +537,7 @@ function ScheduleScreen({
   setScheduleDate: (v: string) => void;
   scheduleTime: string;
   setScheduleTime: (v: string) => void;
+  isSubmitting: boolean;
   onBack: () => void;
   onConfirm: () => void;
 }) {
@@ -515,10 +608,10 @@ function ScheduleScreen({
       <div className="p-4 border-t border-slate-100 shrink-0">
         <button
           onClick={onConfirm}
-          disabled={!scheduleDate || !scheduleTime}
+          disabled={!scheduleDate || !scheduleTime || isSubmitting}
           className="w-full bg-[#000000] hover:bg-[#262626] disabled:bg-slate-300 text-white font-bold py-4 rounded-2xl transition shadow-lg shadow-slate-900/25 text-[15px]"
         >
-          Confirm schedule · {formatNaira(option.price)}
+          {isSubmitting ? "Saving schedule..." : `Confirm schedule · ${formatNaira(option.price)}`}
         </button>
       </div>
     </>
@@ -526,7 +619,7 @@ function ScheduleScreen({
 }
 
 /* ═══════════════ SEARCHING ═══════════════ */
-function SearchingScreen({ progress, onCancel }: { progress: number; onCancel: () => void }) {
+function SearchingScreen({ progress, isSubmitting, onCancel }: { progress: number; isSubmitting: boolean; onCancel: () => void }) {
   return (
     <div className="flex-1 flex flex-col items-center justify-center px-8 text-center">
       <div className="relative w-28 h-28 mb-6">
@@ -549,8 +642,8 @@ function SearchingScreen({ progress, onCancel }: { progress: number; onCancel: (
           style={{ width: `${progress}%` }}
         />
       </div>
-      <button onClick={onCancel} className="text-[14px] font-semibold text-red-500 active:text-red-600">
-        Cancel request
+      <button onClick={onCancel} disabled={isSubmitting} className="text-[14px] font-semibold text-red-500 active:text-red-600 disabled:opacity-50">
+        {isSubmitting ? "Cancelling..." : "Cancel request"}
       </button>
     </div>
   );
@@ -559,10 +652,12 @@ function SearchingScreen({ progress, onCancel }: { progress: number; onCancel: (
 /* ═══════════════ ACTIVE RIDE ═══════════════ */
 function ActiveRideScreen({
   ride,
+  isSubmitting,
   onCancel,
   onComplete,
 }: {
   ride: Ride;
+  isSubmitting: boolean;
   onCancel: () => void;
   onComplete: () => void;
 }) {
@@ -672,13 +767,15 @@ function ActiveRideScreen({
         <div className="p-4 space-y-2 shrink-0">
           <button
             onClick={onComplete}
-            className="w-full bg-[#000000] hover:bg-[#262626] text-white font-bold py-3.5 rounded-2xl transition active:scale-[0.99] text-[15px]"
+            disabled={isSubmitting}
+            className="w-full bg-[#000000] hover:bg-[#262626] disabled:bg-slate-400 text-white font-bold py-3.5 rounded-2xl transition active:scale-[0.99] text-[15px]"
           >
-            I&apos;ve arrived
+            {isSubmitting ? "Updating ride..." : "I've arrived"}
           </button>
           <button
             onClick={onCancel}
-            className="w-full bg-white border-2 border-red-200 text-red-600 font-bold py-3.5 rounded-2xl hover:bg-red-50 transition text-[15px]"
+            disabled={isSubmitting}
+            className="w-full bg-white border-2 border-red-200 text-red-600 font-bold py-3.5 rounded-2xl hover:bg-red-50 disabled:opacity-50 transition text-[15px]"
           >
             Cancel Ride
           </button>

@@ -4,26 +4,22 @@ Fast, safe and reliable rides — your ride, your way.
 
 A fullstack ride-hailing web app inspired by Uber/Bolt, built with **Next.js 16**, **React 19**, **TypeScript** and **Tailwind CSS 4**.
 
-## Features
+## Current scope
 
-### Landing page (`/`)
-- Brand hero matching the design
-- Request a Ride / Book for Later CTAs
-- Feature highlights + phone mockup
+- `/` and `/ride` open the same booking app.
+- Riders get a persistent anonymous Supabase session in this browser.
+- Ride requests, scheduled bookings, cancellations, completions, and ride history are stored in Supabase.
+- Ride rows are scoped to their rider with row-level security. Fares are selected server-side from the ride catalog.
+- Driver matching and map visuals are still demonstrations. There is no driver app or live map integration yet.
 
-### Ride app (`/ride`)
-- **Home** — pickup/destination, ride options, popular destinations
-- **Choose ride** — Economy / Comfort / SUV / Premium + payment method (Cash / Card / Wallet)
-- **Searching** — animated driver matching
-- **Active ride** — map, driver card (Tunde Adesina), cancel / complete
-- **Completed** — summary + star rating
-- **Activity** — ride history (updates when you complete a ride)
-- **Wallet** — balance, top-up, default payment method
-- **Profile** — user info + settings menu
-- Working bottom navigation
+## Supabase setup
 
-### API
-- `GET/POST /api/rides` — list options & create rides
+1. Create a Supabase project and enable anonymous sign-ins under **Authentication → Providers → Anonymous**.
+2. Run [`supabase/migrations/20261004000000_create_rides.sql`](supabase/migrations/20261004000000_create_rides.sql) in the Supabase SQL Editor.
+3. Copy `.env.example` to `.env.local` and set the project URL and anon/publishable key from **Project Settings → API**.
+4. Restart the Next.js dev server after setting environment variables.
+
+The app intentionally uses only the public anon key. Do not put a service-role key in a `NEXT_PUBLIC_` variable or commit it.
 
 ## Run locally
 
@@ -36,20 +32,9 @@ npm run dev
 - Landing: http://localhost:3000  
 - App: http://localhost:3000/ride  
 
-## Demo tips
-
-1. Open `/ride`
-2. Enter locations (or tap a ride option / popular destination)
-3. Select a ride + payment method → Request
-4. Wait for driver match → Active ride screen
-5. Tap "I've arrived" → rate → Done
-6. Check **Activity** (history updated) and **Wallet** (balance drops if you paid with Wallet)
-
 ## Next steps for production
 
-- Auth (NextAuth / Clerk)
-- Database (Prisma + Postgres)
-- Real maps (Mapbox / Google Maps)
-- Payments (Paystack / Flutterwave)
-- WebSockets for live tracking
-- Driver + rider roles
+- Replace anonymous sessions with verified rider and driver accounts.
+- Add driver availability, dispatch, and live trip updates.
+- Integrate geocoding, routing, and driver location tracking.
+- Add real payment processing and operational support tooling.

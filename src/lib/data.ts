@@ -99,11 +99,11 @@ export const DEMO_DRIVER: Driver = {
 };
 
 export const DEMO_USER: User = {
-  name: "Adaobi Okonkwo",
-  email: "adaobi@email.com",
-  phone: "+234 803 456 7890",
+  name: "Oritsej  Odion",
+  email: "oritsej@gmail.com",
+  phone: "+234 815 202 5534",
   photo: "https://api.dicebear.com/7.x/avataaars/svg?seed=Adaobi",
-  walletBalance: 12500,
+  walletBalance: 145000,
 };
 
 export const SAMPLE_HISTORY: Ride[] = [

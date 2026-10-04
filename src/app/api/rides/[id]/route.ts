@@ -13,6 +13,13 @@ type RideRow = {
   created_at: string;
   scheduled_for: string | null;
   completed_at: string | null;
+  driver?: {
+    name: string;
+    rating: number;
+    trips: number;
+    car: string;
+    plate: string;
+  } | null;
 };
 
 function toRide(row: RideRow): Ride | null {
@@ -30,6 +37,15 @@ function toRide(row: RideRow): Ride | null {
     createdAt: row.created_at,
     scheduledFor: row.scheduled_for ?? undefined,
     completedAt: row.completed_at ?? undefined,
+    driver: row.driver ? {
+      id: "assigned-driver",
+      name: row.driver.name,
+      rating: row.driver.rating,
+      trips: row.driver.trips.toLocaleString("en-NG"),
+      car: row.driver.car,
+      plate: row.driver.plate,
+      photo: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(row.driver.name)}`,
+    } : undefined,
   };
 }
 

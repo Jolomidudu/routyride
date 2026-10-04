@@ -4,7 +4,6 @@ import { useState, useEffect, useMemo } from "react";
 import {
   RIDE_OPTIONS,
   POPULAR_DESTINATIONS,
-  DEMO_DRIVER,
   DEMO_USER,
   formatNaira,
   formatDate,
@@ -35,7 +34,6 @@ export default function RideAppPage() {
   const [activeRide, setActiveRide] = useState<Ride | null>(null);
   const [history, setHistory] = useState<Ride[]>([]);
   const [user, setUser] = useState<User>(DEMO_USER);
-  const [searchProgress, setSearchProgress] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState<"Cash" | "Card" | "Wallet">("Cash");
   const [isSchedule, setIsSchedule] = useState(false);
   const [scheduleDate, setScheduleDate] = useState("");
@@ -45,15 +43,15 @@ export default function RideAppPage() {
 
   useEffect(() => {
     let isCurrent = true;
-    loadRides()
+    const refreshRides = () => loadRides()
       .then((rides) => {
         if (!isCurrent) return;
         setHistory(rides);
 
-        const currentRide = rides.find((ride) => ride.status === "searching" || ride.status === "arriving");
+        const currentRide = rides.find((ride) => ride.status === "searching" || ride.status === "accepted" || ride.status === "arriving");
         if (!currentRide) return;
 
-        setActiveRide(currentRide.status === "arriving" ? { ...currentRide, driver: DEMO_DRIVER } : currentRide);
+        setActiveRide(currentRide);
         setSelectedOption(currentRide.option);
         setPickup(currentRide.pickup);
         setDestination(currentRide.destination);
@@ -65,46 +63,14 @@ export default function RideAppPage() {
           setApiError(error instanceof Error ? error.message : "Could not load your rides.");
         }
       });
+    refreshRides();
+    const refreshInterval = window.setInterval(refreshRides, 4000);
 
     return () => {
       isCurrent = false;
+      window.clearInterval(refreshInterval);
     };
   }, []);
-
-  // Searching simulation
-  useEffect(() => {
-    if (flow !== "searching") return;
-    const timeout = setTimeout(() => {
-      setSearchProgress((progress) => Math.min(100, progress + 8));
-    }, 160);
-    return () => clearTimeout(timeout);
-  }, [flow, searchProgress]);
-
-  useEffect(() => {
-    if (flow !== "searching" || searchProgress < 100 || !activeRide) return;
-
-    let isCurrent = true;
-    const timeout = setTimeout(() => {
-      updateRideStatus(activeRide.id, "arriving")
-        .then((ride) => {
-          if (!isCurrent) return;
-          const matchedRide = { ...ride, driver: DEMO_DRIVER };
-          setActiveRide(matchedRide);
-          setHistory((current) => [matchedRide, ...current.filter((item) => item.id !== ride.id)]);
-          setFlow("active");
-        })
-        .catch((error: unknown) => {
-          if (isCurrent) {
-            setApiError(error instanceof Error ? error.message : "Could not update ride status.");
-          }
-        });
-    }, 300);
-
-    return () => {
-      isCurrent = false;
-      clearTimeout(timeout);
-    };
-  }, [flow, searchProgress, activeRide]);
 
   const scheduledISO = useMemo(() => {
     if (!scheduleDate || !scheduleTime) return "";
@@ -131,7 +97,6 @@ export default function RideAppPage() {
       });
       setActiveRide(ride);
       setHistory((current) => [ride, ...current]);
-      setSearchProgress(0);
       setFlow("searching");
     } catch (error) {
       setApiError(error instanceof Error ? error.message : "Could not request a ride.");
@@ -181,7 +146,6 @@ export default function RideAppPage() {
     setActiveRide(null);
     setSelectedOption(null);
     setFlow("idle");
-    setSearchProgress(0);
     setIsSchedule(false);
     setIsSubmitting(false);
   };
@@ -287,7 +251,7 @@ export default function RideAppPage() {
           )}
 
           {flow === "searching" && (
-            <SearchingScreen progress={searchProgress} isSubmitting={isSubmitting} onCancel={handleCancel} />
+            <SearchingScreen isSubmitting={isSubmitting} onCancel={handleCancel} />
           )}
           {flow === "active" && activeRide && (
             <ActiveRideScreen
@@ -619,7 +583,7 @@ function ScheduleScreen({
 }
 
 /* ═══════════════ SEARCHING ═══════════════ */
-function SearchingScreen({ progress, isSubmitting, onCancel }: { progress: number; isSubmitting: boolean; onCancel: () => void }) {
+function SearchingScreen({ isSubmitting, onCancel }: { isSubmitting: boolean; onCancel: () => void }) {
   return (
     <div className="flex-1 flex flex-col items-center justify-center px-8 text-center">
       <div className="relative w-28 h-28 mb-6">
@@ -635,13 +599,7 @@ function SearchingScreen({ progress, isSubmitting, onCancel }: { progress: numbe
         </div>
       </div>
       <h2 className="text-[20px] font-bold text-slate-900 mb-1">Finding your ride...</h2>
-      <p className="text-[14px] text-slate-500 mb-6">Matching you with a nearby driver</p>
-      <div className="w-full max-w-[180px] h-1.5 bg-slate-100 rounded-full overflow-hidden mb-8">
-        <div
-          className="h-full bg-[#000000] rounded-full transition-all duration-150"
-          style={{ width: `${progress}%` }}
-        />
-      </div>
+      <p className="text-[14px] text-slate-500 mb-8">Waiting for a driver to accept your request</p>
       <button onClick={onCancel} disabled={isSubmitting} className="text-[14px] font-semibold text-red-500 active:text-red-600 disabled:opacity-50">
         {isSubmitting ? "Cancelling..." : "Cancel request"}
       </button>
@@ -687,8 +645,8 @@ function ActiveRideScreen({
           <div className="bg-white/95 backdrop-blur-md shadow-lg rounded-2xl px-4 py-3 flex items-center gap-3">
             <div className="w-2.5 h-2.5 rounded-full bg-[#000000] animate-pulse" />
             <div>
-              <p className="text-[14px] font-bold text-slate-900">You&apos;re on your way</p>
-              <p className="text-[12px] text-slate-500">Arriving in 6 min</p>
+              <p className="text-[14px] font-bold text-slate-900">Driver accepted your ride</p>
+              <p className="text-[12px] text-slate-500">Your assigned driver is shown below</p>
             </div>
           </div>
         </div>
@@ -770,7 +728,7 @@ function ActiveRideScreen({
             disabled={isSubmitting}
             className="w-full bg-[#000000] hover:bg-[#262626] disabled:bg-slate-400 text-white font-bold py-3.5 rounded-2xl transition active:scale-[0.99] text-[15px]"
           >
-            {isSubmitting ? "Updating ride..." : "I've arrived"}
+            {isSubmitting ? "Updating ride..." : "Complete ride"}
           </button>
           <button
             onClick={onCancel}
@@ -1094,6 +1052,9 @@ function ProfileScreen({ user }: { user: User }) {
         <button className="w-full mt-5 py-3 text-red-500 font-semibold text-[14px] hover:bg-red-50 rounded-xl transition">
           Log out
         </button>
+        <a href="/driver" className="mt-3 block py-3 text-center text-sm font-semibold text-slate-700 underline underline-offset-4">
+          Open driver portal
+        </a>
       </div>
     </>
   );

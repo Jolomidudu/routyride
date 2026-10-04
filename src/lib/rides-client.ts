@@ -72,3 +72,24 @@ export async function updateRideStatus(id: string, status: "arriving" | "complet
   });
   return result.ride;
 }
+
+export type DriverRideRequest = {
+  id: string;
+  pickup: string;
+  destination: string;
+  option_id: string;
+  status: Ride["status"];
+  price: number;
+  payment_method: Ride["payment"];
+  created_at: string;
+};
+
+export async function loadDriverRequests() {
+  return rideRequest<{ rides: DriverRideRequest[]; setupSql?: string }>("/api/driver/rides");
+}
+
+export async function acceptDriverRide(id: string) {
+  return rideRequest<{ ride: { id: string; status: Ride["status"] } }>(`/api/driver/rides/${id}`, {
+    method: "POST",
+  });
+}

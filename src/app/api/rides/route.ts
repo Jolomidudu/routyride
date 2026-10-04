@@ -13,6 +13,13 @@ type RideRow = {
   created_at: string;
   scheduled_for: string | null;
   completed_at: string | null;
+  driver?: {
+    name: string;
+    rating: number;
+    trips: number;
+    car: string;
+    plate: string;
+  } | null;
 };
 
 function toRide(row: RideRow): Ride | null {
@@ -30,6 +37,15 @@ function toRide(row: RideRow): Ride | null {
     createdAt: row.created_at,
     scheduledFor: row.scheduled_for ?? undefined,
     completedAt: row.completed_at ?? undefined,
+    driver: row.driver ? {
+      id: "assigned-driver",
+      name: row.driver.name,
+      rating: row.driver.rating,
+      trips: row.driver.trips.toLocaleString("en-NG"),
+      car: row.driver.car,
+      plate: row.driver.plate,
+      photo: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(row.driver.name)}`,
+    } : undefined,
   };
 }
 
@@ -59,13 +75,13 @@ export async function GET(request: NextRequest) {
 
     const { data, error } = await auth.supabase
       .from("rides")
-      .select("id, pickup, destination, option_id, status, price, payment_method, created_at, scheduled_for, completed_at")
+      .select("id, pickup, destination, option_id, status, price, payment_method, created_at, scheduled_for, completed_at, driver:drivers!rides_assigned_driver_id_fkey(name, rating, trips, car, plate)")
       .eq("rider_id", auth.userId)
       .order("created_at", { ascending: false })
       .limit(100);
 
     if (error) throw error;
-    const rides = (data as RideRow[]).map(toRide).filter((ride): ride is Ride => ride !== null);
+    const rides = (data as unknown as RideRow[]).map(toRide).filter((ride): ride is Ride => ride !== null);
     return NextResponse.json({ rides, options: RIDE_OPTIONS });
   } catch (error) {
     return configurationError(error) ?? NextResponse.json({ error: "Could not load rides" }, { status: 500 });

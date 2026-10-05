@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import {
   RIDE_OPTIONS,
   POPULAR_DESTINATIONS,
@@ -26,6 +27,7 @@ type Flow =
   | "scheduled_confirm";
 
 export default function RideAppPage() {
+  const router = useRouter();
   const [tab, setTab] = useState<Tab>("home");
   const [flow, setFlow] = useState<Flow>("idle");
   const [pickup, setPickup] = useState("");
@@ -166,7 +168,7 @@ export default function RideAppPage() {
   const handleSignOut = async () => {
     try {
       await signOut();
-      window.location.assign("/auth");
+      router.push("/auth");
     } catch (error) {
       setApiError(error instanceof Error ? error.message : "Could not sign out.");
     }

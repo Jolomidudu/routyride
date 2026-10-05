@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import {
   RIDE_OPTIONS,
   POPULAR_DESTINATIONS,
-  DEMO_USER,
   formatNaira,
   formatDate,
   formatTime,
@@ -15,6 +14,7 @@ import {
   type User,
 } from "@/lib/data";
 import { createRide, loadRides, signOut, updateRideStatus } from "@/lib/rides-client";
+import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 type Tab = "home" | "activity" | "wallet" | "profile";
 type Flow =
@@ -35,7 +35,13 @@ export default function RideAppPage() {
   const [selectedOption, setSelectedOption] = useState<RideOption | null>(null);
   const [activeRide, setActiveRide] = useState<Ride | null>(null);
   const [history, setHistory] = useState<Ride[]>([]);
-  const [user] = useState<User>(DEMO_USER);
+  const [user, setUser] = useState<User>({
+    name: "Rider",
+    email: "",
+    phone: "Not added",
+    photo: "https://api.dicebear.com/7.x/avataaars/svg?seed=Rider",
+    walletBalance: 0,
+  });
   const [paymentMethod, setPaymentMethod] = useState<"Cash" | "Card" | "Wallet">("Cash");
   const [isSchedule, setIsSchedule] = useState(false);
   const [scheduleDate, setScheduleDate] = useState("");
@@ -45,6 +51,22 @@ export default function RideAppPage() {
 
   useEffect(() => {
     let isCurrent = true;
+    getSupabaseBrowserClient().auth.getUser().then(({ data, error }) => {
+      if (!isCurrent || error || !data.user) return;
+
+      const email = data.user.email ?? "";
+      const metadataName = data.user.user_metadata?.full_name ?? data.user.user_metadata?.name;
+      setUser((current) => ({
+        ...current,
+        name: typeof metadataName === "string" && metadataName.trim()
+          ? metadataName.trim()
+          : email.split("@")[0] || "Rider",
+        email,
+        phone: data.user.phone ?? "Not added",
+        photo: "https://api.dicebear.com/7.x/avataaars/svg?seed=RoutyrideRider",
+      }));
+    });
+
     const refreshRides = () => loadRides()
       .then((rides) => {
         if (!isCurrent) return;

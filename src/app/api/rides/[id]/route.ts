@@ -69,7 +69,7 @@ export async function PATCH(
       return NextResponse.json({ error: "Invalid ride update" }, { status: 400 });
     }
     const status = body && typeof body === "object" ? (body as Record<string, unknown>).status : null;
-    if (status !== "arriving" && status !== "completed" && status !== "cancelled") {
+    if (status !== "cancelled") {
       return NextResponse.json({ error: "Invalid ride status" }, { status: 400 });
     }
 

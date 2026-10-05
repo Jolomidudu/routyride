@@ -33,7 +33,7 @@ export default function RideAppPage() {
   const [selectedOption, setSelectedOption] = useState<RideOption | null>(null);
   const [activeRide, setActiveRide] = useState<Ride | null>(null);
   const [history, setHistory] = useState<Ride[]>([]);
-  const [user, setUser] = useState<User>(DEMO_USER);
+  const [user] = useState<User>(DEMO_USER);
   const [paymentMethod, setPaymentMethod] = useState<"Cash" | "Card" | "Wallet">("Cash");
   const [isSchedule, setIsSchedule] = useState(false);
   const [scheduleDate, setScheduleDate] = useState("");
@@ -73,15 +73,6 @@ export default function RideAppPage() {
       window.clearInterval(refreshInterval);
     };
   }, []);
-
-  useEffect(() => {
-    if (!activeRide) return;
-    const completedRide = history.find((ride) => ride.id === activeRide.id && ride.status === "completed");
-    if (completedRide && flow !== "completed") {
-      setActiveRide(completedRide);
-      setFlow("completed");
-    }
-  }, [activeRide, flow, history]);
 
   const scheduledISO = useMemo(() => {
     if (!scheduleDate || !scheduleTime) return "";
@@ -173,6 +164,10 @@ export default function RideAppPage() {
   };
 
   const showTabs = flow === "idle";
+  const displayedRide = activeRide
+    ? history.find((ride) => ride.id === activeRide.id) ?? activeRide
+    : null;
+  const hasCompletedActiveRide = displayedRide?.status === "completed";
 
   return (
     <div className="min-h-dvh bg-[#f3f3f3] flex justify-center">
@@ -241,15 +236,15 @@ export default function RideAppPage() {
           {flow === "searching" && (
             <SearchingScreen isSubmitting={isSubmitting} onCancel={handleCancel} />
           )}
-          {flow === "active" && activeRide && (
+          {flow === "active" && activeRide && !hasCompletedActiveRide && (
             <ActiveRideScreen
               ride={activeRide}
               isSubmitting={isSubmitting}
               onCancel={handleCancel}
             />
           )}
-          {flow === "completed" && activeRide && (
-            <CompletedScreen ride={activeRide} onDone={handleDone} />
+          {(flow === "completed" || hasCompletedActiveRide) && displayedRide && (
+            <CompletedScreen ride={displayedRide} onDone={handleDone} />
           )}
           {flow === "scheduled_confirm" && activeRide && (
             <ScheduledConfirmScreen ride={activeRide} onDone={handleDone} />

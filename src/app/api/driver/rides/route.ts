@@ -39,7 +39,15 @@ export async function GET(request: NextRequest) {
       .limit(100);
     if (error) throw error;
 
-    return NextResponse.json({ rides: data });
+    const { data: assignedRides, error: assignedError } = await client.supabase
+      .from("rides")
+      .select("id, pickup, destination, option_id, status, price, payment_method, created_at")
+      .eq("assigned_driver_id", client.userId)
+      .in("status", ["accepted", "arriving", "in_progress"])
+      .order("created_at", { ascending: true });
+    if (assignedError) throw assignedError;
+
+    return NextResponse.json({ rides: data, assignedRides });
   } catch (error) {
     if (error instanceof Error && error.message.includes("not configured")) {
       return NextResponse.json({ error: error.message }, { status: 503 });

@@ -46,3 +46,56 @@ export async function POST(
     return NextResponse.json({ error: "Could not accept this ride" }, { status: 500 });
   }
 }
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const client = getRideRequestClient(request);
+    if (!client) return NextResponse.json({ error: "Sign-in required" }, { status: 401 });
+
+    const { data: authData, error: authError } = await client.supabase.auth.getUser(client.accessToken);
+    if (authError || !authData.user) {
+      return NextResponse.json({ error: "Session expired. Please retry." }, { status: 401 });
+    }
+
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ error: "Invalid ride update" }, { status: 400 });
+    }
+    const status = body && typeof body === "object" ? (body as Record<string, unknown>).status : null;
+    if (status !== "arriving" && status !== "in_progress" && status !== "completed") {
+      return NextResponse.json({ error: "Invalid driver ride status" }, { status: 400 });
+    }
+
+    const { id } = await params;
+    const { data, error } = await client.supabase.rpc("transition_driver_ride", {
+      p_ride_id: id,
+      p_next_status: status,
+    });
+    if (error) {
+      if (error.message.includes("Ride not found")) {
+        return NextResponse.json({ error: "Assigned ride not found" }, { status: 404 });
+      }
+      if (error.message.includes("Invalid ride status transition")) {
+        return NextResponse.json({ error: "Ride cannot move to that status" }, { status: 409 });
+      }
+      if (error.message.includes("Driver account not found")) {
+        return NextResponse.json({ error: "This account is not enabled as a driver." }, { status: 403 });
+      }
+      throw error;
+    }
+
+    const ride = (Array.isArray(data) ? data[0] : data) as { id: string; status: string } | null;
+    if (!ride) return NextResponse.json({ error: "Assigned ride not found" }, { status: 404 });
+    return NextResponse.json({ ride: { id: ride.id, status: ride.status } });
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("not configured")) {
+      return NextResponse.json({ error: error.message }, { status: 503 });
+    }
+    return NextResponse.json({ error: "Could not update driver ride" }, { status: 500 });
+  }
+}

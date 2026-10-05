@@ -1,16 +1,22 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { acceptDriverRide, loadDriverRequests, type DriverRideRequest } from "@/lib/rides-client";
+import {
+  acceptDriverRide,
+  loadDriverRequests,
+  type DriverRideRequest,
+  updateDriverRideStatus,
+} from "@/lib/rides-client";
 import { formatNaira, RIDE_OPTIONS } from "@/lib/data";
 
 export default function DriverPage() {
   const [rides, setRides] = useState<DriverRideRequest[]>([]);
+  const [assignedRides, setAssignedRides] = useState<DriverRideRequest[]>([]);
   const [setupSql, setSetupSql] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [isLoading, setIsLoading] = useState(true);
-  const [acceptingId, setAcceptingId] = useState("");
+  const [updatingId, setUpdatingId] = useState("");
 
   useEffect(() => {
     let isCurrent = true;
@@ -18,6 +24,7 @@ export default function DriverPage() {
       .then((result) => {
         if (!isCurrent) return;
         setRides(result.rides);
+        setAssignedRides(result.assignedRides ?? []);
         setSetupSql(result.setupSql ?? "");
         setError("");
       })
@@ -37,18 +44,48 @@ export default function DriverPage() {
   }, []);
 
   const handleAccept = async (rideId: string) => {
-    setAcceptingId(rideId);
+    setUpdatingId(rideId);
     setError("");
     setNotice("");
     try {
       await acceptDriverRide(rideId);
+      const acceptedRide = rides.find((ride) => ride.id === rideId);
+      if (acceptedRide) {
+        setAssignedRides((current) => [{ ...acceptedRide, status: "accepted" }, ...current]);
+      }
       setRides((current) => current.filter((ride) => ride.id !== rideId));
       setNotice("Ride accepted. The rider will see your assignment shortly.");
     } catch (acceptError) {
       setError(acceptError instanceof Error ? acceptError.message : "Could not accept this ride.");
     } finally {
-      setAcceptingId("");
+      setUpdatingId("");
     }
+  };
+
+  const handleStatus = async (ride: DriverRideRequest, status: "arriving" | "in_progress" | "completed") => {
+    setUpdatingId(ride.id);
+    setError("");
+    setNotice("");
+    try {
+      await updateDriverRideStatus(ride.id, status);
+      if (status === "completed") {
+        setAssignedRides((current) => current.filter((item) => item.id !== ride.id));
+        setNotice("Trip completed.");
+      } else {
+        setAssignedRides((current) => current.map((item) => item.id === ride.id ? { ...item, status } : item));
+      }
+    } catch (statusError) {
+      setError(statusError instanceof Error ? statusError.message : "Could not update trip status.");
+    } finally {
+      setUpdatingId("");
+    }
+  };
+
+  const actionForStatus = (ride: DriverRideRequest) => {
+    if (ride.status === "accepted") return { label: "Mark arriving", status: "arriving" as const };
+    if (ride.status === "arriving") return { label: "Start trip", status: "in_progress" as const };
+    if (ride.status === "in_progress") return { label: "Complete trip", status: "completed" as const };
+    return null;
   };
 
   return (
@@ -76,6 +113,40 @@ export default function DriverPage() {
           </section>
         ) : (
           <section className="mt-7">
+            <div className="mb-4">
+              <h2 className="text-lg font-semibold">Your active trips</h2>
+              <p className="mt-1 text-sm text-slate-500">Update the trip as it progresses</p>
+            </div>
+            {assignedRides.length === 0 ? (
+              <p className="border-y border-slate-200 py-5 text-sm text-slate-500">No active trips assigned.</p>
+            ) : (
+              <ul className="mb-8 divide-y divide-slate-200 border-y border-slate-200">
+                {assignedRides.map((ride) => {
+                  const option = RIDE_OPTIONS.find((item) => item.id === ride.option_id);
+                  const action = actionForStatus(ride);
+                  return (
+                    <li key={ride.id} className="flex flex-col gap-4 py-5 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold uppercase text-slate-500">{ride.status.replace("_", " ")}</p>
+                        <p className="mt-2 truncate text-sm font-semibold">{ride.pickup}</p>
+                        <p className="mt-1 truncate text-sm text-slate-600">To {ride.destination}</p>
+                        <p className="mt-2 text-xs text-slate-500">{option?.name ?? ride.option_id} · {formatNaira(ride.price)}</p>
+                      </div>
+                      {action && (
+                        <button
+                          onClick={() => handleStatus(ride, action.status)}
+                          disabled={updatingId !== ""}
+                          className="shrink-0 rounded-md bg-black px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-wait disabled:bg-slate-400"
+                        >
+                          {updatingId === ride.id ? "Updating..." : action.label}
+                        </button>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+
             <div className="mb-4 flex items-end justify-between gap-4">
               <div>
                 <h2 className="text-lg font-semibold">Available now</h2>
@@ -104,10 +175,10 @@ export default function DriverPage() {
                         <span className="font-semibold tabular-nums">{formatNaira(ride.price)}</span>
                         <button
                           onClick={() => handleAccept(ride.id)}
-                          disabled={acceptingId !== ""}
+                          disabled={updatingId !== ""}
                           className="rounded-md bg-black px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-wait disabled:bg-slate-400"
                         >
-                          {acceptingId === ride.id ? "Accepting..." : "Accept ride"}
+                          {updatingId === ride.id ? "Accepting..." : "Accept ride"}
                         </button>
                       </div>
                     </li>

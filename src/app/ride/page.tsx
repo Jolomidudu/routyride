@@ -48,7 +48,9 @@ export default function RideAppPage() {
         if (!isCurrent) return;
         setHistory(rides);
 
-        const currentRide = rides.find((ride) => ride.status === "searching" || ride.status === "accepted" || ride.status === "arriving");
+        const currentRide = rides.find((ride) =>
+          ride.status === "searching" || ride.status === "accepted" || ride.status === "arriving" || ride.status === "in_progress"
+        );
         if (!currentRide) return;
 
         setActiveRide(currentRide);
@@ -71,6 +73,15 @@ export default function RideAppPage() {
       window.clearInterval(refreshInterval);
     };
   }, []);
+
+  useEffect(() => {
+    if (!activeRide) return;
+    const completedRide = history.find((ride) => ride.id === activeRide.id && ride.status === "completed");
+    if (completedRide && flow !== "completed") {
+      setActiveRide(completedRide);
+      setFlow("completed");
+    }
+  }, [activeRide, flow, history]);
 
   const scheduledISO = useMemo(() => {
     if (!scheduleDate || !scheduleTime) return "";
@@ -148,29 +159,6 @@ export default function RideAppPage() {
     setFlow("idle");
     setIsSchedule(false);
     setIsSubmitting(false);
-  };
-
-  const handleComplete = async () => {
-    if (activeRide) {
-      setApiError("");
-      setIsSubmitting(true);
-      try {
-        const completed = await updateRideStatus(activeRide.id, "completed");
-        setHistory((current) => [completed, ...current.filter((ride) => ride.id !== completed.id)]);
-        if (paymentMethod === "Wallet") {
-          setUser((current) => ({
-            ...current,
-            walletBalance: Math.max(0, current.walletBalance - activeRide.price),
-          }));
-        }
-        setActiveRide({ ...completed, driver: activeRide.driver });
-        setFlow("completed");
-      } catch (error) {
-        setApiError(error instanceof Error ? error.message : "Could not complete this ride.");
-      } finally {
-        setIsSubmitting(false);
-      }
-    }
   };
 
   const handleDone = () => {
@@ -258,7 +246,6 @@ export default function RideAppPage() {
               ride={activeRide}
               isSubmitting={isSubmitting}
               onCancel={handleCancel}
-              onComplete={handleComplete}
             />
           )}
           {flow === "completed" && activeRide && (
@@ -612,13 +599,17 @@ function ActiveRideScreen({
   ride,
   isSubmitting,
   onCancel,
-  onComplete,
 }: {
   ride: Ride;
   isSubmitting: boolean;
   onCancel: () => void;
-  onComplete: () => void;
 }) {
+  const rideStatus = ride.status === "in_progress"
+    ? { title: "Your trip is in progress", detail: "Heading to your destination" }
+    : ride.status === "arriving"
+      ? { title: "Your driver is arriving", detail: "Your assigned driver is on the way" }
+      : { title: "Driver accepted your ride", detail: "Your assigned driver is preparing for pickup" };
+
   return (
     <>
       <div className="relative h-[290px] bg-[#f3f3f3] shrink-0">
@@ -645,8 +636,8 @@ function ActiveRideScreen({
           <div className="bg-white/95 backdrop-blur-md shadow-lg rounded-2xl px-4 py-3 flex items-center gap-3">
             <div className="w-2.5 h-2.5 rounded-full bg-[#000000] animate-pulse" />
             <div>
-              <p className="text-[14px] font-bold text-slate-900">Driver accepted your ride</p>
-              <p className="text-[12px] text-slate-500">Your assigned driver is shown below</p>
+              <p className="text-[14px] font-bold text-slate-900">{rideStatus.title}</p>
+              <p className="text-[12px] text-slate-500">{rideStatus.detail}</p>
             </div>
           </div>
         </div>
@@ -723,13 +714,7 @@ function ActiveRideScreen({
         </div>
 
         <div className="p-4 space-y-2 shrink-0">
-          <button
-            onClick={onComplete}
-            disabled={isSubmitting}
-            className="w-full bg-[#000000] hover:bg-[#262626] disabled:bg-slate-400 text-white font-bold py-3.5 rounded-2xl transition active:scale-[0.99] text-[15px]"
-          >
-            {isSubmitting ? "Updating ride..." : "Complete ride"}
-          </button>
+          <p className="py-2 text-center text-xs text-slate-500">Your driver will update the trip status.</p>
           <button
             onClick={onCancel}
             disabled={isSubmitting}

@@ -65,7 +65,7 @@ export async function createRide(input: {
   return result.ride;
 }
 
-export async function updateRideStatus(id: string, status: "arriving" | "completed" | "cancelled") {
+export async function updateRideStatus(id: string, status: "cancelled") {
   const result = await rideRequest<{ ride: Ride }>(`/api/rides/${id}`, {
     method: "PATCH",
     body: JSON.stringify({ status }),
@@ -85,11 +85,22 @@ export type DriverRideRequest = {
 };
 
 export async function loadDriverRequests() {
-  return rideRequest<{ rides: DriverRideRequest[]; setupSql?: string }>("/api/driver/rides");
+  return rideRequest<{
+    rides: DriverRideRequest[];
+    assignedRides: DriverRideRequest[];
+    setupSql?: string;
+  }>("/api/driver/rides");
 }
 
 export async function acceptDriverRide(id: string) {
   return rideRequest<{ ride: { id: string; status: Ride["status"] } }>(`/api/driver/rides/${id}`, {
     method: "POST",
+  });
+}
+
+export async function updateDriverRideStatus(id: string, status: "arriving" | "in_progress" | "completed") {
+  return rideRequest<{ ride: { id: string; status: Ride["status"] } }>(`/api/driver/rides/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ status }),
   });
 }

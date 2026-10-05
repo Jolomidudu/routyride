@@ -1,34 +1,17 @@
 import type { Ride, RideOption } from "@/lib/data";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 
-function formatAuthError(error: unknown) {
-  if (!error || typeof error !== "object") return "Could not start a rider session.";
-
-  const message = "message" in error && typeof error.message === "string" ? error.message : "";
-
-  if (message.toLowerCase().includes("anonymous sign-ins are disabled")) {
-    return "Anonymous sign-ins are disabled in this Supabase project. Open Authentication → Providers → Anonymous and enable it, then refresh the page.";
-  }
-
-  if (message.toLowerCase().includes("email not confirmed") || message.toLowerCase().includes("not authenticated")) {
-    return "Supabase auth is not available for this session. Check your project settings and enable the required auth provider.";
-  }
-
-  return message || "Could not start a rider session.";
-}
-
 async function getAccessToken() {
   const supabase = getSupabaseBrowserClient();
   const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
   if (sessionError) throw sessionError;
   if (sessionData.session) return sessionData.session.access_token;
+  throw new Error("You’re signed out. Sign in or create an account to continue.");
+}
 
-  const { data, error } = await supabase.auth.signInAnonymously();
-  if (error) {
-    throw new Error(formatAuthError(error));
-  }
-  if (!data.session) throw new Error("Could not start a rider session.");
-  return data.session.access_token;
+export async function signOut() {
+  const { error } = await getSupabaseBrowserClient().auth.signOut();
+  if (error) throw error;
 }
 
 async function rideRequest<T>(path: string, init?: RequestInit): Promise<T> {

@@ -96,10 +96,18 @@ export default function DriverPage() {
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Routyride</p>
             <h1 className="mt-1 text-2xl font-bold">Driver requests</h1>
           </div>
-          <a href="/ride" className="text-sm font-semibold text-slate-700 underline underline-offset-4">Rider app</a>
+          <nav className="flex items-center gap-4">
+            <a href="/auth?next=/driver" className="text-sm font-semibold text-slate-700 underline underline-offset-4">Account</a>
+            <a href="/ride" className="text-sm font-semibold text-slate-700 underline underline-offset-4">Rider app</a>
+          </nav>
         </header>
 
-        {error && <p role="alert" className="mt-5 rounded-md bg-red-50 px-4 py-3 text-sm text-red-800">{error}</p>}
+        {error && (
+          <div role="alert" className="mt-5 flex items-start justify-between gap-4 rounded-md bg-red-50 px-4 py-3 text-sm text-red-800">
+            <p>{error}</p>
+            {error.toLowerCase().includes("signed out") && <a href="/auth?next=/driver" className="shrink-0 font-semibold underline">Sign in</a>}
+          </div>
+        )}
         {notice && <p role="status" className="mt-5 rounded-md bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{notice}</p>}
 
         {setupSql ? (

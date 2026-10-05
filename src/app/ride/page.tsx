@@ -13,7 +13,7 @@ import {
   type Ride,
   type User,
 } from "@/lib/data";
-import { createRide, loadRides, updateRideStatus } from "@/lib/rides-client";
+import { createRide, loadRides, signOut, updateRideStatus } from "@/lib/rides-client";
 
 type Tab = "home" | "activity" | "wallet" | "profile";
 type Flow =
@@ -163,6 +163,15 @@ export default function RideAppPage() {
     setApiError("");
   };
 
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+      window.location.assign("/auth");
+    } catch (error) {
+      setApiError(error instanceof Error ? error.message : "Could not sign out.");
+    }
+  };
+
   const showTabs = flow === "idle";
   const displayedRide = activeRide
     ? history.find((ride) => ride.id === activeRide.id) ?? activeRide
@@ -175,6 +184,9 @@ export default function RideAppPage() {
           {apiError && (
             <div role="alert" className="absolute left-3 right-3 top-3 z-50 flex items-start justify-between gap-3 rounded-lg bg-red-50 px-4 py-3 text-[13px] text-red-800 shadow-md">
               <p>{apiError}</p>
+              {apiError.toLowerCase().includes("signed out") && (
+                <a href="/auth?next=/ride" className="shrink-0 font-semibold underline">Sign in</a>
+              )}
               <button onClick={() => setApiError("")} className="shrink-0 font-semibold underline">Dismiss</button>
             </div>
           )}
@@ -201,7 +213,7 @@ export default function RideAppPage() {
               setPaymentMethod={setPaymentMethod}
             />
           )}
-          {flow === "idle" && tab === "profile" && <ProfileScreen user={user} />}
+          {flow === "idle" && tab === "profile" && <ProfileScreen user={user} onSignOut={handleSignOut} />}
 
           {flow === "select" && (
             <SelectScreen
@@ -989,7 +1001,7 @@ function WalletScreen({
 }
 
 /* ═══════════════ PROFILE ═══════════════ */
-function ProfileScreen({ user }: { user: User }) {
+function ProfileScreen({ user, onSignOut }: { user: User; onSignOut: () => void }) {
   return (
     <>
       <div className="px-5 pt-2 pb-2 shrink-0">
@@ -1029,7 +1041,10 @@ function ProfileScreen({ user }: { user: User }) {
           ))}
         </div>
 
-        <button className="w-full mt-5 py-3 text-red-500 font-semibold text-[14px] hover:bg-red-50 rounded-xl transition">
+        <a href="/auth" className="mt-5 block w-full rounded-xl py-3 text-center text-[14px] font-semibold text-slate-700 hover:bg-slate-50">
+          Account and sign-in
+        </a>
+        <button onClick={onSignOut} className="w-full mt-2 py-3 text-red-500 font-semibold text-[14px] hover:bg-red-50 rounded-xl transition">
           Log out
         </button>
         <a href="/driver" className="mt-3 block py-3 text-center text-sm font-semibold text-slate-700 underline underline-offset-4">
